@@ -1,0 +1,51 @@
+summary
+  This is Skype client for windows written in Ruby .
+
+  これはWindows限定で動くSkypeクライアントです。
+
+  Emacs派はkiwanamiさんのemacs-skypeを使ってください。
+    https://github.com/kiwanami/emacs-skype
+  Windows以外のvim派はmFumiさんのSkyshを使ってください。
+    https://github.com/mfumi/Skysh
+
+  ソースを見たらわかりますが、evalを使った手抜き仕様です。
+  取り扱いには注意してください。
+
+  動作確認用の端末にはVimShellを使っています。_vimrcに以下の行を追加して使ってください。
+
+  nmap :sk :VimShellInteractive irb.bat -r skype<CR>
+
+command
+  h,head,get_head
+    未読のチャットの題名(FriendlyName)を取得してきます。
+  o,open
+    Skypeのウィンドウをアクティブにします
+  src,show,showchats
+    最近のチャットを取得します
+  sc,show_chats
+    チャットの履歴を取得します
+  set,set_chat
+    上述のsrc,scコマンドのindexを第一引数として実行すると、チャットモードに入ります
+  quit
+    終了します
+  チャットモード
+    send
+      第一引数をシングルクォートかダブルクォートで囲んで実行すると、チャットに投げます。複数行の入力には対応していません。
+    read
+      未読のチャットを表示します。
+
+Q&A
+  Q.どうして作ったの？
+    A.仕事でグループに入れられたチャットの大半が関係無いのに、時間を取られるのが惜しいので、vimで作業しながら横目で確認する手段が欲しかったからです。
+  Q.どうしてチャットを始めるコマンドが無いの？
+    A.既存のチャットを横目でちょっと確認する為に作ったので、優先度が低かったのです。
+  Q.コマンドプロンプトだと文字化けします
+    A.そのうち対応するつもりですが、コマンドプロンプトを使ってもどうせ日本語打ってもまともに表示できないのでVimShellを使ってください。
+  Q.call出来ないんですか
+    A.Skypeはチャットばかりなので、やる気が起きませんでした。そのうちやる気出す。
+  Q.どうしてRuby4Skypeとかを使わないの？
+    A.新しくインストールしないと使えないような環境は不親切だと思うのと、私はMacとかLinuxがメインマシンじゃないから。
+  Q.「新しくインストールしないと～」っていうけど、Rubyをインストールする必要がありますよね？
+    A.いまどきRubyも入れてない人がgithub見るわけないと思うので考慮してません。
+
+
