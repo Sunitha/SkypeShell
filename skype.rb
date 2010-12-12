@@ -1,9 +1,7 @@
 require "rubygems"
 require "win32ole"
-require "drb/drb"
 require "kconv"
 
-$KCODE="u"
 class WIN32OLE
   def sort
     ole_methods.join("\t").split("\t").sort
@@ -20,31 +18,45 @@ end
 
 class Skype
   attr_accessor :skype, :events, :cur_chat, :cur_chats
-  def initialize
+  def initialize(char_code)
     @skype=WIN32OLE.new "Skype4COM.Skype"
     #@events=WIN32OLE_EVENT.new(@skype, "_ISkypeEvents")
     @cur_chat = nil
     @cur_chat = []
+    case char_code
+    when "s", "sjis"
+      @kconv_method = "tosjis"
+    else
+      @kconv_method = "toutf8"
+    end
+  end
+
+  def quit
+    exit
   end
 
   def puts(str)
-    Kernel.puts(Kconv.toutf8(str))
+    Kernel.puts(Kconv.__send__(@kconv_method, str))
+  end
+
+  def print(str)
+    Kernel.print(Kconv.__send__(@kconv_method, str))
   end
 
   def get_chats
-    @skype.Chats.to_a.map{|c| Chat.new(c)}
+    @skype.Chats.to_a.map{|c| Chat.new(@skype, c)}
   end
   alias :chats :get_chats
 
   def get_recent_chats
-    @skype.RecentChats.to_a.map{|c| Chat.new(c)}
+    @skype.RecentChats.to_a.map{|c| Chat.new(@skype, c)}
   end
   alias :recent_chats :get_recent_chats
   alias :rc :get_recent_chats
 
   #チャットのFriendlyNameだけを表示
   def get_head
-    Kernel.puts "sending now..."
+    puts "sending now..."
     @cur_chats = get_recent_chats
     @cur_chats.each_index do |index|
       chat = @cur_chats[index]
@@ -68,11 +80,10 @@ class Skype
 #    end
 #    nil
 #  end
-#  alias :r :read
 
   #Skypeのウィンドウを最前面に
   def open
-    chats[0].OpenWindow
+    (cur_chat || get_recent_chats[0]).OpenWindow
   end
   alias :o :open
 
@@ -102,11 +113,6 @@ class Skype
     nil
   end
 
-  def send(str)
-    @cur_chat.send(str)
-    nil
-  end
-
   def read_cur_chats
     Kernel.puts "sending now..."
     chats = cur_chats || get_recent_chats
@@ -118,7 +124,9 @@ class Skype
   alias :rcc :read_cur_chats
 
   class Chat
-    def initialize(chat)
+    attr_reader :chat
+    def initialize(skype, chat)
+      @skype = skype
       @chat = chat
     end
 
@@ -137,9 +145,7 @@ class Skype
     def read
       messages.reverse.each do |message|
         if(!message.has_read? && message.is_normal_message?)
-          name = message.FromDisplayName
-          edited = message.EditedBy
-          puts Kconv.toutf8 "#{@chat.Name} #{message.Type} #{message.Role} #{edited} #{@chat.name} #{message.Status} #{name} #{message.Body} #{message.TimeStamp}"
+          @skype.puts "#{@chat.Name} #{message.Type} #{message.Role} #{edited} #{@chat.name} #{message.Status} #{name} #{message.Body} #{message.TimeStamp}"
         end
       end
       nil
@@ -185,51 +191,72 @@ class Skype
 end
 
 class SkypeShell
-  def initialize
+  def initialize(char_code="u")
     @skype = nil
     @chat = nil
+    @char_code = char_code
   end
 
   def start
+    renew_skype
     loop do
-      begin
-        print("#{(@chat ? Kconv.toutf8(@chat.name) : "")}> ")
-      rescue => e
-        puts e
-        print("> ")
-      end
+      puts_prompt
       input = gets.chomp
-      break if input == "quit"
       if(input.size.zero?)
-        puts ""
+        @skype.puts ""
       else
-        case input
-        when "get_head", "head", "h", "show_recent", "sr", "show"
-          @skype = Skype.new
-        else
-          @skype = Skype.new unless @skype
-        end
-        #TODO:eval使わない形式に直す
-        if(@chat && /^(send .+|read|r)$/ =~ input)
-          begin
-            result = eval("@chat.#{Kconv.tosjis(input)}")
-          rescue => e
-            result = e
-          end
-        else
-          begin
-            result = eval("@skype.#{Kconv.tosjis(input)}")
-          rescue => e
-            result = e
-          end
-        end
-        if(/^set(_chat)? .+$/ =~ input)
-          @chat = result
-        end
-        puts(result)
+        renew_skype(input)
+        result = eval_input(input)
+        renew_chat(input, result)
+        @skype.puts(result)
       end
     end
   end
+
+  def puts_prompt
+    begin
+      @skype.print("#{(@chat ? @chat.name : "")}> ")
+    rescue => e
+      puts e
+      @skype.print("> ")
+    end
+  end
+
+  #TODO:eval使わない形式に直す
+  def eval_input(input)
+    if(@chat && /^(send .+|read|r)$/ =~ input)
+      begin
+        result = eval("@chat.#{Kconv.tosjis(input)}")
+      rescue => e
+        result = e
+      end
+    else
+      begin
+        result = eval("@skype.#{Kconv.tosjis(input)}")
+      rescue => e
+        result = e
+      end
+    end
+    result
+  end
+
+  def renew_skype(input="")
+    case input
+    when "get_head", "head", "h", "show_recent", "sr", "show"
+      @skype = Skype.new(@char_code)
+    else
+      @skype = Skype.new(@char_code) unless @skype
+    end
+  end
+
+  def renew_chat(input, result)
+    if(/^set(_chat)? .+$/ =~ input)
+      @chat = result
+    end
+  end
 end
-Skysh.new.start
+#SJIS用
+#SkypeShell.new("s").start
+#UTF-8用
+SkypeShell.new.start
 
