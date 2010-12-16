@@ -18,8 +18,9 @@ end
 
 class Skype
   attr_accessor :skype, :events, :cur_chat, :cur_chats
-  def initialize(char_code)
+  def initialize(char_code="u")
     @skype=WIN32OLE.new "Skype4COM.Skype"
+    @skype.Attach()
     #@events=WIN32OLE_EVENT.new(@skype, "_ISkypeEvents")
     @cur_chat = nil
     @cur_chat = []
@@ -35,21 +36,37 @@ class Skype
     exit
   end
 
+  def call(handle)
+    @skype.PlaceCall(handle)
+  end
+
+  def get_active_calls
+    @skype.ActiveCalls.to_a
+  end
+
   def puts(str)
-    Kernel.puts(Kconv.__send__(@kconv_method, str))
+    begin
+      Kernel.puts(Kconv.__send__(@kconv_method, str)) unless str.nil?
+    rescue
+      Kernel.puts ""
+    end
   end
 
   def print(str)
-    Kernel.print(Kconv.__send__(@kconv_method, str))
+    begin
+      Kernel.print(Kconv.__send__(@kconv_method, str)) unless str.nil?
+    rescue
+      Kernel.print ""
+    end
   end
 
   def get_chats
-    @skype.Chats.to_a.map{|c| Chat.new(@skype, c)}
+    @skype.Chats.to_a.map{|c| Chat.new(self, c)}
   end
   alias :chats :get_chats
 
   def get_recent_chats
-    @skype.RecentChats.to_a.map{|c| Chat.new(@skype, c)}
+    @skype.RecentChats.to_a.map{|c| Chat.new(self, c)}
   end
   alias :recent_chats :get_recent_chats
   alias :rc :get_recent_chats
@@ -128,6 +145,7 @@ class Skype
     def initialize(skype, chat)
       @skype = skype
       @chat = chat
+      @cur_call = nil
     end
 
     def name
@@ -138,11 +156,54 @@ class Skype
       end
     end
 
+    def call
+      handles = get_handles
+      handles.each do |handle|
+        begin
+          @cur_call = Call.new(@skype.call(handle))
+          break
+        rescue
+        end
+      end
+      handles[1..(handles.size-1)].each do |handle|
+        begin
+          @cur_call.join(handle)
+        rescue
+        end
+      end
+      @cur_call
+    end
+    alias :c :call
+
+    def finish
+      begin
+        @cur_call.finish
+      rescue
+        ""
+      end
+    end
+    alias :f :finish
+
+    def get_handles
+      @chat.Members.to_a.map{|m| m.Handle}
+    end
+
+    def show_members
+      @chat.Members.to_a.each do |m|
+        #@skype.puts m.DisplayName
+        @skype.puts m.Handle
+      end
+      nil
+    end
+    alias :members :show_members
+    alias :m :show_members
+
     def send(str)
       @chat.SendMessage(str)
     end
 
     def read
+      puts messages.size
       messages.reverse.each do |message|
         if(!message.has_read? && message.is_normal_message?)
           @skype.puts "#{@chat.Name} #{message.Type} #{message.Role} #{edited} #{@chat.name} #{message.Status} #{name} #{message.Body} #{message.TimeStamp}"
@@ -188,6 +249,17 @@ class Skype
       end
     end
   end
+
+  class Call
+    attr_reader :call
+    def initialize(call)
+      @call = call
+    end
+
+    def finish
+      @call.Finish
+    end
+  end
 end
 
 class SkypeShell
@@ -207,8 +279,9 @@ class SkypeShell
       else
         renew_skype(input)
         result = eval_input(input)
-        renew_chat(input, result)
-        @skype.puts(result)
+        #renew_chat(input, result)
+        #@skype.puts(result)
+        #@skype.puts ""
       end
     end
   end
@@ -224,15 +297,21 @@ class SkypeShell
 
   #TODO:eval使わない形式に直す
   def eval_input(input)
-    if(@chat && /^(send .+|read|r)$/ =~ input)
+    if(/^:(.*)$/ =~ input)
       begin
-        result = eval("@chat.#{Kconv.tosjis(input)}")
+        result = @chat.send(Kconv.tosjis($1))
+      rescue => e
+        result = e
+      end
+    elsif(@chat && /^(send .+|read|r|call|c|finish|f|members|m)$/ =~ input)
+      begin
+        result = eval("@chat.#{encode(input)}")
       rescue => e
         result = e
       end
     else
       begin
-        result = eval("@skype.#{Kconv.tosjis(input)}")
+        result = eval("@skype.#{encode(input)}")
       rescue => e
         result = e
       end
@@ -240,10 +319,18 @@ class SkypeShell
     result
   end
 
+  def encode(str)
+    if(str)
+      Kconv.tosjis(str)
+    else
+      ""
+    end
+  end
+
   def renew_skype(input="")
     case input
     when "get_head", "head", "h", "show_recent", "sr", "show"
-      @skype = Skype.new(@char_code)
+      @skype = Skype.new(@char_code) unless @skype
     else
       @skype = Skype.new(@char_code) unless @skype
     end
